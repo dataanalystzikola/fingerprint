@@ -27,9 +27,11 @@ st.markdown("""
     .st-emotion-cache-1215r6k h1 {
         color: white;
         font-weight: bold;
+        text-align: center;
     }
     .st-emotion-cache-1215r6k h3 {
         color: white;
+        text-align: center;
     }
     .st-emotion-cache-1m6g90s { /* Main content area */
         background-color: #ffffff;
@@ -73,7 +75,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Display logo and title
-st.image("https://drive.google.com/uc?export=view&id=1CmUb2LpmRSXJyiFUqqIngq0MYiQlIIxa", width=200)
+st.image("https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png", width=200)
 st.title("Finger Print App")
 
 # Main application logic
