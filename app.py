@@ -4,23 +4,88 @@ import numpy as np
 import io
 from datetime import datetime
 
+# Inject custom CSS for styling
+st.markdown("""
+<style>
+    body {
+        font-family: 'Inter', Arial, sans-serif;
+        background-color: #f4f4f4;
+        color: #333333;
+    }
+    .st-emotion-cache-1215r6k {
+        background-color: #F37626;
+        color: white;
+        padding: 24px;
+        text-align: center;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .st-emotion-cache-1215r6k img {
+        max-width: 150px;
+        height: auto;
+    }
+    .st-emotion-cache-1215r6k h1 {
+        color: white;
+        font-weight: bold;
+    }
+    .st-emotion-cache-1215r6k h3 {
+        color: white;
+    }
+    .st-emotion-cache-1m6g90s { /* Main content area */
+        background-color: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 24px;
+        margin-top: 20px;
+    }
+    .st-emotion-cache-1m6g90s h3 {
+        color: #F37626;
+        font-weight: 600;
+    }
+    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c {
+        width: 100%;
+    }
+    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c th, 
+    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c td {
+        padding: 12px;
+        border: 1px solid #dddddd;
+        text-align: left;
+        font-size: 14px;
+    }
+    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c th {
+        background-color: #f9f9f9;
+        font-weight: 600;
+        color: #555555;
+    }
+    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c tbody tr:nth-child(odd) {
+        background-color: #f9f9f9;
+    }
+    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c tbody tr:hover {
+        background-color: #f1f1f1;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Display logo and title
-st.image("black.jpeg", width=200)
+st.image("https://drive.google.com/uc?export=view&id=1CmUb2LpmRSXJyiFUqqIngq0MYiQlIIxa", width=200)
 st.title("Finger Print App")
 
-# Upload CSV file
+# Main application logic
 uploaded_file = st.file_uploader("Upload your file", type=["txt", "csv"])
 
 if uploaded_file is not None:
     # Read the file
-    # We'll handle the case where the uploaded file is a .txt with no header
-    # and use the headers we defined previously.
-    df = pd.read_csv(uploaded_file, sep='\t', header=None,
-                     names=['id', 'Time', 'test_1', 'test_2', 'Name', 'test_3', 'test_4', 'test_5'])
+    df = pd.read_csv(uploaded_file, sep='\t', header=None, names=['id', 'Time', 'test_1', 'test_2', 'Name', 'test_3', 'test_4', 'test_5'])
 
     # Data cleaning
     df['id'] = df['id'].astype(int)
-
+    
     # Check if the 'Name' column has a trailing whitespace and remove it
     df['Name'] = df['Name'].str.strip()
 
@@ -35,19 +100,15 @@ if uploaded_file is not None:
     # Sort data by Person ID, Date, and Time
     df = df.sort_values(by=['id', 'Date', 'Time'])
 
-    # Group data by employee and date
-    grouped = df.groupby(['id', 'Name', 'Date'])['Time'].agg(list).reset_index()
-
-
     # Function to assign Check In and Check Out intelligently
     def assign_check_in_out(times):
         # A helper function to safely find min and max times
         if not times:
             return None, None
-
+        
         first_entry = min(times)
         last_entry = max(times)
-
+        
         # If there is only one entry for the day
         if len(times) == 1:
             check_in_threshold = datetime.strptime("14:00:00", "%H:%M:%S").time()
@@ -58,7 +119,6 @@ if uploaded_file is not None:
         else:
             return first_entry, last_entry
 
-
     # Apply the function to the data
     grouped[['Check In', 'Check Out']] = grouped['Time'].apply(lambda x: pd.Series(assign_check_in_out(x)))
 
@@ -68,11 +128,10 @@ if uploaded_file is not None:
     # Replace missing values
     grouped['Check In'] = grouped['Check In'].astype(str).replace('None', 'no login')
     grouped['Check Out'] = grouped['Check Out'].astype(str).replace('None', 'no logout')
-
+    
     # Show processed data
     st.subheader("Processed Data")
     st.write(grouped)
-
 
     # Convert DataFrame to Excel
     @st.cache_data
@@ -81,7 +140,6 @@ if uploaded_file is not None:
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Sheet1')
         return output.getvalue()
-
 
     # Button to download the file
     excel_data = convert_df_to_excel(grouped)
