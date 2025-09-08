@@ -12,7 +12,7 @@ st.markdown("""
         background-color: #f4f4f4;
         color: #333333;
     }
-    .st-emotion-cache-1215r6k {
+    #header-container {
         background-color: #F37626;
         color: white;
         padding: 24px;
@@ -20,65 +20,61 @@ st.markdown("""
         border-radius: 8px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-    .st-emotion-cache-1215r6k img {
+    #header-container img {
         max-width: 150px;
         height: auto;
     }
-    .st-emotion-cache-1215r6k h1 {
+    #header-container h1 {
         color: white;
         font-weight: bold;
         text-align: center;
     }
-    .st-emotion-cache-1215r6k h3 {
-        color: white;
-        text-align: center;
-    }
-    .st-emotion-cache-1m6g90s { /* Main content area */
+    #main-container {
         background-color: #ffffff;
         border-radius: 8px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         padding: 24px;
         margin-top: 20px;
     }
-    .st-emotion-cache-1m6g90s h3 {
+    #main-container h3 {
         color: #F37626;
         font-weight: 600;
     }
-    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c {
+    .stDataFrame {
         width: 100%;
     }
-    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c table {
+    .stDataFrame table {
         border-collapse: collapse;
         width: 100%;
         margin-top: 20px;
         margin-bottom: 20px;
     }
-    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c th, 
-    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c td {
+    .stDataFrame th, 
+    .stDataFrame td {
         padding: 12px;
         border: 1px solid #dddddd;
         text-align: left;
         font-size: 14px;
     }
-    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c th {
+    .stDataFrame th {
         background-color: #f9f9f9;
         font-weight: 600;
         color: #555555;
     }
-    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c tbody tr:nth-child(odd) {
+    .stDataFrame tbody tr:nth-child(odd) {
         background-color: #f9f9f9;
     }
-    .st-emotion-cache-1m6g90s .st-emotion-cache-p5m81c tbody tr:hover {
+    .stDataFrame tbody tr:hover {
         background-color: #f1f1f1;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Display logo and title
-st.image("black.jpeg", width=200)
-st.title("Finger Print App")
-
 # Main application logic
+with st.container():
+    st.image("black.jpeg", width=200)
+    st.title("Finger Print App")
+
 uploaded_file = st.file_uploader("Upload your file", type=["txt", "csv"])
 
 if uploaded_file is not None:
@@ -122,6 +118,7 @@ if uploaded_file is not None:
             return first_entry, last_entry
 
     # Apply the function to the data
+    grouped = df.groupby(['id', 'Name', 'Date'])['Time'].agg(list).reset_index()
     grouped[['Check In', 'Check Out']] = grouped['Time'].apply(lambda x: pd.Series(assign_check_in_out(x)))
 
     # Drop the original 'Time' column
@@ -132,8 +129,9 @@ if uploaded_file is not None:
     grouped['Check Out'] = grouped['Check Out'].astype(str).replace('None', 'no logout')
     
     # Show processed data
-    st.subheader("Processed Data")
-    st.write(grouped)
+    with st.container():
+        st.subheader("Processed Data")
+        st.write(grouped)
 
     # Convert DataFrame to Excel
     @st.cache_data
