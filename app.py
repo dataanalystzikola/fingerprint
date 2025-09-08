@@ -75,7 +75,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Display logo and title
-st.image("https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png", width=200)
+st.image("black.jpeg", width=200)
 st.title("Finger Print App")
 
 # Main application logic
