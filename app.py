@@ -72,42 +72,91 @@ st.markdown("""
 
 # Main application logic
 with st.container():
-    st.image("black.jpeg", width=200)
+    # Use the local file for the image
+    st.image("black.jpeg", width=200) 
     st.title("Finger Print App")
 
 uploaded_file = st.file_uploader("Upload your file", type=["txt", "csv"])
 
 if uploaded_file is not None:
-    # Read the file
-    df = pd.read_csv(uploaded_file, sep='\t', header=None, names=['company','Name','id', 'Time', 'test_1', 'test_2'])
+    # --- SECURE FILE READING (Using regex '\s+' for variable multiple spaces separator) ---
+    try:
+        # We use '\s+' to read any number of spaces/tabs as one separator.
+        # We include extra columns in names=['...'] to avoid 'saw X fields' error.
+        df = pd.read_csv(
+            uploaded_file, 
+            sep='\s+', 
+            encoding='Windows-1256', 
+            header=None, 
+            skiprows=[0], # Skip the main Arabic header row only (line 0 from Test222.txt)
+            names=['Extra0', 'Company', 'Name', 'id', 'Time_Raw', 'Extra1', 'Extra2', 'Extra3', 'Extra4', 'Extra5', 'Extra6', 'Extra7'],
+            engine='python' # Using python engine for robust regex splitting
+        ).iloc[1:] # Drop the empty row after the header (line 1 from Test222.txt)
+        
+    except Exception as e:
+        st.error(f"Error reading file: {e}. يرجى التأكد من أن الملف ليس فارغًا وأن هيكل الأعمدة صحيح.")
+        st.stop() 
 
-    # Data cleaning
+    # --- DATA CLEANING ---
+    
+    # 1. Safely convert 'id' to integer
+    # We must drop rows where 'id' is NaN *before* converting to int, to prevent IntCastingNaNError
+    df['id'] = pd.to_numeric(df['id'], errors='coerce')
+    df = df.dropna(subset=['id']).copy()
     df['id'] = df['id'].astype(int)
     
-    # Check if the 'Name' column has a trailing whitespace and remove it
-    df['Name'] = df['Name'].str.strip()
+    # 2. Ensure 'Name' column is string type before stripping (Fixes AttributeError)
+    df['Name'] = df['Name'].astype(str).str.strip()
+    
+    # 3. Final cleanup: Drop unnecessary columns 
+    df = df.drop(columns=['Extra0', 'Company', 'Extra1', 'Extra2', 'Extra3', 'Extra4', 'Extra5', 'Extra6', 'Extra7'], errors='ignore')
 
-    # Drop unnecessary columns
-    df = df.drop(columns=['test_1', 'test_2','company'])
+    # Rename the raw column to 'Time' temporarily
+    df = df.rename(columns={'Time_Raw': 'Time'})
 
-    # Split Date and Time
-    df[['Date', 'Time']] = df['Time'].str.split(' ', expand=True)
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    df['Time'] = pd.to_datetime(df['Time'], format='%H:%M:%S').dt.time
+    # 4. Safely Split Date and Time_Raw (Example: '9/1/2025 10:10:37 AM')
+    
+    # Convert 'Time_Raw' to string, replacing NaN with an empty string ('')
+    time_series = df['Time'].astype(str).replace('nan', '') 
+    
+    # Split the series safely
+    split_result = time_series.str.split(' ', n=1, expand=True)
+
+    # Assign the split results
+    df[['Date_Part', 'Time_With_AMPM']] = split_result
+    
+    # 5. Process Date and Time for final use
+    
+    # Convert 'Date_Part' to proper datetime object
+    df['Date'] = pd.to_datetime(df['Date_Part'], format='%m/%d/%Y', errors='coerce')
+
+    # Combine Date and Time_With_AMPM strings into a single datetime column for sorting
+    df['DateTime'] = pd.to_datetime(
+        df['Date_Part'].astype(str) + ' ' + df['Time_With_AMPM'].astype(str), 
+        format='%m/%d/%Y %I:%M:%S %p', 
+        errors='coerce'
+    )
+    
+    # Extract only the final time part
+    df['Time'] = df['DateTime'].dt.time
+    
+    # Drop intermediate and original raw columns
+    df = df.drop(columns=['Date_Part', 'Time_With_AMPM', 'DateTime'])
+
 
     # Sort data by Person ID, Date, and Time
     df = df.sort_values(by=['id', 'Date', 'Time'])
 
     # Function to assign Check In and Check Out intelligently
     def assign_check_in_out(times):
-        # A helper function to safely find min and max times
         if not times:
             return None, None
         
+        # We must rely on min/max functions to find the first/last time
         first_entry = min(times)
         last_entry = max(times)
         
-        # If there is only one entry for the day
+        # Logic for single entry
         if len(times) == 1:
             check_in_threshold = datetime.strptime("14:00:00", "%H:%M:%S").time()
             if first_entry <= check_in_threshold:
@@ -121,7 +170,7 @@ if uploaded_file is not None:
     grouped = df.groupby(['id', 'Name', 'Date'])['Time'].agg(list).reset_index()
     grouped[['Check In', 'Check Out']] = grouped['Time'].apply(lambda x: pd.Series(assign_check_in_out(x)))
 
-    # Drop the original 'Time' column
+    # Drop the original 'Time' column (list of times)
     grouped = grouped.drop(columns=['Time'])
 
     # Replace missing values
@@ -149,4 +198,3 @@ if uploaded_file is not None:
         file_name="processed_attendance.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
