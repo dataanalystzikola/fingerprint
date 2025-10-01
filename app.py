@@ -81,7 +81,14 @@ if uploaded_file is not None:
     # Read the file
     df = pd.read_csv(uploaded_file, sep='\t', encoding='Windows-1256', header=None, names=['id', 'Time', 'test_1', 'test_2', 'Name', 'test_3', 'test_4', 'test_5'])
 
-    # Data cleaning
+    # --- FIX for ValueError: Safely convert 'id' to numeric and drop invalid rows ---
+    # 1. Convert 'id' to numeric, forcing errors (like header text) to NaN
+    df['id'] = pd.to_numeric(df['id'], errors='coerce')
+    
+    # 2. Drop rows where 'id' is NaN (which includes the header row or empty lines)
+    df = df.dropna(subset=['id']).copy()
+    
+    # 3. Convert 'id' to integer type after dropping NaNs
     df['id'] = df['id'].astype(int)
     
     # Check if the 'Name' column has a trailing whitespace and remove it
@@ -149,4 +156,3 @@ if uploaded_file is not None:
         file_name="processed_attendance.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
