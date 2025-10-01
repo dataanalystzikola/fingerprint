@@ -163,25 +163,30 @@ if uploaded_file is not None:
     # Function to assign Check In and Check Out intelligently
     def assign_check_in_out(times):
         if not times:
-            return None, None
+            return [None, None]
         
         # We must rely on min/max functions to find the first/last time
         first_entry = min(times)
         last_entry = max(times)
         
-        # Logic for single entry
+        # Logic for single entry (returns list of 2 elements)
         if len(times) == 1:
             check_in_threshold = datetime.strptime("14:00:00", "%H:%M:%S").time()
             if first_entry <= check_in_threshold:
-                return first_entry, None
+                return [first_entry, None]
             else:
-                return None, first_entry
+                return [None, first_entry]
         else:
-            return first_entry, last_entry
+            # Returns list of 2 elements for multi-entry
+            return [first_entry, last_entry]
 
     # Apply the function to the data
     grouped = df.groupby(['id', 'Name', 'Date'])['Time'].agg(list).reset_index()
-    grouped[['Check In', 'Check Out']] = grouped['Time'].apply(lambda x: pd.Series(assign_check_in_out(x)))
+    
+    # FIX: Apply the function and assign columns directly from the list output
+    check_results = grouped['Time'].apply(lambda x: pd.Series(assign_check_in_out(x)))
+    grouped['Check In'] = check_results[0]
+    grouped['Check Out'] = check_results[1]
 
     # Drop the original 'Time' column (list of times)
     grouped = grouped.drop(columns=['Time'])
