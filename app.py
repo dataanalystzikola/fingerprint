@@ -97,8 +97,7 @@ if uploaded_file is not None:
         )
     except Exception as e:
         st.error(f"Error reading file: {e}. Ensure the file is tab-separated and the format is correct.")
-        return
-
+        st.stop()
     # Data cleaning and column renaming to match the required format
     
     # 1. Safely convert 'id' to numeric and drop invalid rows (if any remaining)
@@ -194,3 +193,4 @@ if uploaded_file is not None:
         file_name="processed_attendance.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
