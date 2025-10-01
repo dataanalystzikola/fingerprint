@@ -79,7 +79,7 @@ uploaded_file = st.file_uploader("Upload your file", type=["txt", "csv"])
 
 if uploaded_file is not None:
     # Read the file
-    df = pd.read_csv(uploaded_file, sep='\t', header=None, names=['id', 'Time', 'test_1', 'test_2', 'Name', 'test_3', 'test_4', 'test_5'])
+    df = pd.read_csv(uploaded_file, sep='\t', header=None, names=['company','Name','id', 'Time', 'test_1', 'test_2'])
 
     # Data cleaning
     df['id'] = df['id'].astype(int)
@@ -88,7 +88,7 @@ if uploaded_file is not None:
     df['Name'] = df['Name'].str.strip()
 
     # Drop unnecessary columns
-    df = df.drop(columns=['test_1', 'test_2', 'test_3', 'test_4', 'test_5'])
+    df = df.drop(columns=['test_1', 'test_2','company'])
 
     # Split Date and Time
     df[['Date', 'Time']] = df['Time'].str.split(' ', expand=True)
@@ -149,3 +149,4 @@ if uploaded_file is not None:
         file_name="processed_attendance.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
