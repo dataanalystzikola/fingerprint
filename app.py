@@ -120,11 +120,7 @@ if uploaded_file is not None:
     time_series = df['Time'].astype(str).replace('nan', '') 
     
     # NEW FIX: Use regex splitting to handle potential multiple spaces between Time and AM/PM
-    # We expect 'DD/MM/YYYY' followed by a space, then 'HH:MM:SS AM/PM'.
-    # This splits the string into three parts (Date, Time, AM/PM) or two parts (Date, Time AM/PM)
-    # We use `.str.extract` to reliably capture the three expected components.
-    
-    # Regex to capture Date, Time, and AM/PM parts: (\d+/\d+/\d+) (\d+:\d+:\d+)\s*(\w+)
+    # Regex to capture Date, Time, and AM/PM parts: (\d+/\d+/\d+)\s+(\d{1,2}:\d{2}:\d{2})\s*(\w+)
     date_time_parts = time_series.str.extract(r'(\d+/\d+/\d+)\s+(\d{1,2}:\d{2}:\d{2})\s*(\w+)', expand=True)
 
     # Assign captured results (Date_Part, Time_Only, AM_PM)
@@ -141,20 +137,22 @@ if uploaded_file is not None:
 
     # Combine Date and Time_With_AMPM strings into a single datetime column for sorting
     # Use fillna('') to safely format strings without converting to 'NaT' string first
+    # This column MUST be preserved until Time is extracted.
     df['DateTime'] = pd.to_datetime(
         df['Date_Part'].fillna('').astype(str) + ' ' + df['Time_With_AMPM'].fillna('').astype(str), 
         format='%m/%d/%Y %I:%M:%S %p', 
         errors='coerce'
     )
     
-    # Extract only the final time part
+    # Extract ONLY the final time part to 'Time' column (Fixes KeyError on 'Time')
     df['Time'] = df['DateTime'].dt.time
     
-    # Drop intermediate and original raw columns
-    df = df.drop(columns=['Date_Part', 'Time_With_AMPM', 'DateTime', 'Time'], errors='ignore') # Keep only final 'Time' if needed
-
-    # Re-extract 'Time' safely (since it was dropped temporarily)
-    df['Time'] = df['DateTime'].dt.time
+    # Drop intermediate and original raw columns (KEEPING 'Time' and 'Date')
+    # FIX: Removed 'DateTime' and 'Time' from the drop list that caused the KeyError.
+    df = df.drop(columns=['Time_Raw', 'Date_Part', 'Time_With_AMPM'], errors='ignore') 
+    
+    # Drop the temporary 'DateTime' column AFTER extracting 'Time'
+    df = df.drop(columns=['DateTime'])
     
     # Sort data by Person ID, Date, and Time
     df = df.sort_values(by=['id', 'Date', 'Time'])
