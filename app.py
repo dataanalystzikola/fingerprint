@@ -148,11 +148,14 @@ if uploaded_file is not None:
     df['Time'] = df['DateTime'].dt.time
     
     # Drop intermediate and original raw columns (KEEPING 'Time' and 'Date')
-    # FIX: Removed 'DateTime' and 'Time' from the drop list that caused the KeyError.
     df = df.drop(columns=['Time_Raw', 'Date_Part', 'Time_With_AMPM'], errors='ignore') 
     
     # Drop the temporary 'DateTime' column AFTER extracting 'Time'
     df = df.drop(columns=['DateTime'])
+    
+    # --- FINAL CLEANUP BEFORE GROUPING ---
+    # FIX: Remove rows where Time conversion failed (NaT) to prevent ValueError in apply/min/max functions.
+    df = df.dropna(subset=['Time']).copy() 
     
     # Sort data by Person ID, Date, and Time
     df = df.sort_values(by=['id', 'Date', 'Time'])
