@@ -72,35 +72,72 @@ st.markdown("""
 
 # Main application logic
 with st.container():
-    st.image("black.jpeg", width=200)
+    # Use the local file for the image
+    st.image("black.jpeg", width=200) 
     st.title("Finger Print App")
 
 uploaded_file = st.file_uploader("Upload your file", type=["txt", "csv"])
 
 if uploaded_file is not None:
-    # Read the file
-    df = pd.read_csv(uploaded_file, sep='\t', encoding='Windows-1256', header=None, names=['id', 'Time', 'test_1', 'test_2', 'Name', 'test_3', 'test_4', 'test_5'])
+    # Read the file using regex for multiple spaces separator and the correct encoding
+    # We define custom names to map the required columns correctly based on the new file structure.
+    # The columns we care about are Name (col 2), ID (col 3), and Time/Date (col 4).
+    try:
+        df = pd.read_csv(
+            uploaded_file, 
+            sep='\s+', 
+            encoding='Windows-1256', 
+            header=None, 
+            skiprows=[0], # Skip the header row (row 0) that contains Arabic names
+            names=[
+                'Extra1', 'Company', 'Name', 'id', 'Date_Time_Raw', 
+                'Extra2', 'Extra3', 'Extra4', 'Extra5'
+            ],
+            engine='python' # Using python engine for complex regex separator
+        )
+    except Exception as e:
+        st.error(f"Error reading file: {e}. Ensure the file is tab-separated and the format is correct.")
+        return
 
-    # --- FIX for ValueError: Safely convert 'id' to numeric and drop invalid rows ---
-    # 1. Convert 'id' to numeric, forcing errors (like header text) to NaN
+    # Data cleaning and column renaming to match the required format
+    
+    # 1. Safely convert 'id' to numeric and drop invalid rows (if any remaining)
     df['id'] = pd.to_numeric(df['id'], errors='coerce')
-    
-    # 2. Drop rows where 'id' is NaN (which includes the header row or empty lines)
     df = df.dropna(subset=['id']).copy()
-    
-    # 3. Convert 'id' to integer type after dropping NaNs
     df['id'] = df['id'].astype(int)
     
-    # Check if the 'Name' column has a trailing whitespace and remove it
-    df['Name'] = df['Name'].str.strip()
+    # 2. Ensure 'Name' column is string type before stripping
+    df['Name'] = df['Name'].astype(str).str.strip()
 
-    # Drop unnecessary columns
-    df = df.drop(columns=['test_1', 'test_2', 'test_3', 'test_4', 'test_5'])
+    # Drop unnecessary columns (the ones we mapped as Extra/Company)
+    df = df.drop(columns=['Extra1', 'Company', 'Extra2', 'Extra3', 'Extra4', 'Extra5'])
 
-    # Split Date and Time
-    df[['Date', 'Time']] = df['Time'].str.split(' ', expand=True)
-    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-    df['Time'] = pd.to_datetime(df['Time'], format='%H:%M:%S').dt.time
+    # Rename the raw column to 'Time' temporarily for consistency
+    df = df.rename(columns={'Date_Time_Raw': 'Time'})
+
+    # Split Date and Time - Date and Time are separated by a single space in the column
+    # Example: '9/1/2025 10:10:37 AM' -> '9/1/2025' and '10:10:37 AM'
+    df[['Date', 'Time_With_AMPM']] = df['Time'].str.split(' ', n=1, expand=True)
+    
+    # Re-assemble Date and Time properly for sorting and conversion
+    # We must use datetime.strptime to handle the full format including AM/PM
+    
+    # Convert 'Date' to proper datetime object
+    df['Date'] = pd.to_datetime(df['Date'], format='%m/%d/%Y', errors='coerce')
+
+    # Combine Date and Time_With_AMPM string columns into a single datetime column for accurate sorting
+    df['DateTime'] = df['Date'].dt.strftime('%m/%d/%Y') + ' ' + df['Time_With_AMPM']
+    
+    # Convert to datetime objects, including the AM/PM part
+    # Format: 9/1/2025 10:10:37 AM -> %m/%d/%Y %I:%M:%S %p
+    df['DateTime'] = pd.to_datetime(df['DateTime'], format='%m/%d/%Y %I:%M:%S %p', errors='coerce')
+    
+    # Extract only the time part as datetime.time object
+    df['Time'] = df['DateTime'].dt.time
+    
+    # Drop intermediate columns
+    df = df.drop(columns=['Time_With_AMPM', 'DateTime'])
+
 
     # Sort data by Person ID, Date, and Time
     df = df.sort_values(by=['id', 'Date', 'Time'])
@@ -111,6 +148,7 @@ if uploaded_file is not None:
         if not times:
             return None, None
         
+        # We must rely on min/max functions to find the first/last time
         first_entry = min(times)
         last_entry = max(times)
         
@@ -128,7 +166,7 @@ if uploaded_file is not None:
     grouped = df.groupby(['id', 'Name', 'Date'])['Time'].agg(list).reset_index()
     grouped[['Check In', 'Check Out']] = grouped['Time'].apply(lambda x: pd.Series(assign_check_in_out(x)))
 
-    # Drop the original 'Time' column
+    # Drop the original 'Time' column (list of times)
     grouped = grouped.drop(columns=['Time'])
 
     # Replace missing values
