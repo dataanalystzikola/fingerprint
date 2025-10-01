@@ -116,14 +116,19 @@ if uploaded_file is not None:
     # Rename the raw column to 'Time' temporarily for consistency
     df = df.rename(columns={'Date_Time_Raw': 'Time'})
 
-    # --- FIX for ValueError: Columns must be same length as key (Line 121) ---
-    # Convert 'Time' to string, replacing NaN (which is a float) with an empty string 
-    # so that the split function doesn't return an unexpected single column (e.g. ['nan']).
+    # --- FIX for ValueError: Columns must be same length as key (Line 126) ---
+    
+    # 1. Convert 'Time' to string, replacing NaN (float value) with an empty string ('') 
+    #    so that no 'nan' string is created, which could cause split errors.
     time_series = df['Time'].astype(str).replace('nan', '') 
     
-    # Split Date and Time - Date and Time are separated by a single space in the column
-    # Example: '9/1/2025 10:10:37 AM' -> '9/1/2025' and '10:10:37 AM'
-    df[['Date', 'Time_With_AMPM']] = time_series.str.split(' ', n=1, expand=True)
+    # 2. Split the series safely. We apply split only to non-empty strings.
+    #    The empty strings will correctly result in a [None, None] row in the expanded DataFrame.
+    split_result = time_series.str.split(' ', n=1, expand=True)
+
+    # 3. Assign the split results safely (Pandas 2.x method)
+    df[['Date', 'Time_With_AMPM']] = split_result
+    
     # --- END FIX ---
     
     # Re-assemble Date and Time properly for sorting and conversion
