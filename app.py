@@ -4,7 +4,7 @@ import numpy as np
 import io
 from datetime import datetime
 
-# Inject custom CSS for styling (نفس الستايل بتاعك، مش هنغيره)
+# Inject custom CSS for styling
 st.markdown("""
 <style>
     body {
@@ -75,93 +75,77 @@ with st.container():
     st.image("black.jpeg", width=200)
     st.title("Finger Print App")
 
-# File uploader
 uploaded_file = st.file_uploader("Upload your file", type=["txt", "csv"])
 
 if uploaded_file is not None:
-    try:
-        # Try different encodings
-        encodings = ['utf-16', 'windows-1256', 'utf-8']
-        df = None
-        for encoding in encodings:
-            try:
-                df = pd.read_csv(uploaded_file, sep='\s+', header=0, encoding=encoding)
-                break
-            except:
-                uploaded_file.seek(0)  # Reset file pointer to beginning
-                continue
+    # Read the file
+    df = pd.read_csv(uploaded_file, sep='\t', header=None, names=['id', 'Time', 'test_1', 'test_2', 'Name', 'test_3', 'test_4', 'test_5'])
+
+    # Data cleaning
+    df['id'] = df['id'].astype(int)
+    
+    # Check if the 'Name' column has a trailing whitespace and remove it
+    df['Name'] = df['Name'].str.strip()
+
+    # Drop unnecessary columns
+    df = df.drop(columns=['test_1', 'test_2', 'test_3', 'test_4', 'test_5'])
+
+    # Split Date and Time
+    df[['Date', 'Time']] = df['Time'].str.split(' ', expand=True)
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df['Time'] = pd.to_datetime(df['Time'], format='%H:%M:%S').dt.time
+
+    # Sort data by Person ID, Date, and Time
+    df = df.sort_values(by=['id', 'Date', 'Time'])
+
+    # Function to assign Check In and Check Out intelligently
+    def assign_check_in_out(times):
+        # A helper function to safely find min and max times
+        if not times:
+            return None, None
         
-        if df is None:
-            st.error("Could not read the file with any supported encoding. Please check the file format.")
-            st.stop()
-
-        # Rename columns to English for easier processing
-        df.columns = ['Department', 'Name', 'ID', 'DateTime', 'Location', 'Number', 'RegistrationMethod', 'CardNumber']
-
-        # Data cleaning
-        df['ID'] = df['ID'].astype(int)
-        df['Name'] = df['Name'].str.strip()
-
-        # Drop unnecessary columns
-        df = df.drop(columns=['Department', 'Location', 'Number', 'RegistrationMethod', 'CardNumber'])
-
-        # Split Date and Time
-        df[['Date', 'Time']] = df['DateTime'].str.split(' ', n=1, expand=True)
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        df['Time'] = pd.to_datetime(df['Time'], format='%I:%M:%S %p', errors='coerce').dt.time
-
-        # Sort data by ID, Date, and Time
-        df = df.sort_values(by=['ID', 'Date', 'Time'])
-
-        # Function to assign Check In and Check Out intelligently
-        def assign_check_in_out(times):
-            if not times:
-                return None, None
-            
-            first_entry = min(times)
-            last_entry = max(times)
-            
-            if len(times) == 1:
-                check_in_threshold = datetime.strptime("14:00:00", "%H:%M:%S").time()
-                if first_entry <= check_in_threshold:
-                    return first_entry, None
-                else:
-                    return None, first_entry
+        first_entry = min(times)
+        last_entry = max(times)
+        
+        # If there is only one entry for the day
+        if len(times) == 1:
+            check_in_threshold = datetime.strptime("14:00:00", "%H:%M:%S").time()
+            if first_entry <= check_in_threshold:
+                return first_entry, None
             else:
-                return first_entry, last_entry
+                return None, first_entry
+        else:
+            return first_entry, last_entry
 
-        # Apply the function to the data
-        grouped = df.groupby(['ID', 'Name', 'Date'])['Time'].agg(list).reset_index()
-        grouped[['Check In', 'Check Out']] = grouped['Time'].apply(lambda x: pd.Series(assign_check_in_out(x)))
+    # Apply the function to the data
+    grouped = df.groupby(['id', 'Name', 'Date'])['Time'].agg(list).reset_index()
+    grouped[['Check In', 'Check Out']] = grouped['Time'].apply(lambda x: pd.Series(assign_check_in_out(x)))
 
-        # Drop the original 'Time' column
-        grouped = grouped.drop(columns=['Time'])
+    # Drop the original 'Time' column
+    grouped = grouped.drop(columns=['Time'])
 
-        # Replace missing values
-        grouped['Check In'] = grouped['Check In'].astype(str).replace('None', 'no login')
-        grouped['Check Out'] = grouped['Check Out'].astype(str).replace('None', 'no logout')
+    # Replace missing values
+    grouped['Check In'] = grouped['Check In'].astype(str).replace('None', 'no login')
+    grouped['Check Out'] = grouped['Check Out'].astype(str).replace('None', 'no logout')
+    
+    # Show processed data
+    with st.container():
+        st.subheader("Processed Data")
+        st.write(grouped)
 
-        # Show processed data
-        with st.container():
-            st.subheader("Processed Data")
-            st.write(grouped)
+    # Convert DataFrame to Excel
+    @st.cache_data
+    def convert_df_to_excel(df):
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+        return output.getvalue()
 
-        # Convert DataFrame to Excel
-        @st.cache_data
-        def convert_df_to_excel(df):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Sheet1')
-            return output.getvalue()
-
-        # Button to download the file
-        excel_data = convert_df_to_excel(grouped)
-        st.download_button(
-            label="Download Processed Excel File",
-            data=excel_data,
-            file_name="processed_attendance.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
+    # Button to download the file
+    excel_data = convert_df_to_excel(grouped)
+    st.download_button(
+        label="Download Processed Excel File",
+        data=excel_data,
+        file_name="processed_attendance.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
