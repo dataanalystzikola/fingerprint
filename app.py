@@ -71,7 +71,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Main application logic
-with st.container():
+with st.container(border=True):
     # Use the local file for the image
     st.image("black.jpeg", width=200) 
     st.title("Finger Print App")
@@ -88,10 +88,10 @@ if uploaded_file is not None:
             sep='\s+', 
             encoding='Windows-1256', 
             header=None, 
-            skiprows=[0], # Skip the main Arabic header row only (line 0 from Test222.txt)
-            names=['Extra0', 'Company', 'Name', 'id', 'Time_Raw', 'Extra1', 'Extra2', 'Extra3', 'Extra4', 'Extra5', 'Extra6', 'Extra7'],
+            skiprows=[0, 1], # Skip the main Arabic header row (0) and the subsequent empty line (1)
+            names=['Company', 'Name', 'id', 'Time_Raw', 'Extra1', 'Extra2', 'Extra3', 'Extra4', 'Extra5', 'Extra6', 'Extra7'],
             engine='python' # Using python engine for robust regex splitting
-        ).iloc[1:] # Drop the empty row after the header (line 1 from Test222.txt)
+        ).copy()
         
     except Exception as e:
         st.error(f"Error reading file: {e}. يرجى التأكد من أن الملف ليس فارغًا وأن هيكل الأعمدة صحيح.")
@@ -99,8 +99,7 @@ if uploaded_file is not None:
 
     # --- DATA CLEANING ---
     
-    # 1. Safely convert 'id' to integer
-    # We must drop rows where 'id' is NaN *before* converting to int, to prevent IntCastingNaNError
+    # 1. Safely convert 'id' to integer (Fixes IntCastingNaNError)
     df['id'] = pd.to_numeric(df['id'], errors='coerce')
     df = df.dropna(subset=['id']).copy()
     df['id'] = df['id'].astype(int)
@@ -109,53 +108,40 @@ if uploaded_file is not None:
     df['Name'] = df['Name'].astype(str).str.strip()
     
     # 3. Final cleanup: Drop unnecessary columns 
-    df = df.drop(columns=['Extra0', 'Company', 'Extra1', 'Extra2', 'Extra3', 'Extra4', 'Extra5', 'Extra6', 'Extra7'], errors='ignore')
+    df = df.drop(columns=['Company', 'Extra1', 'Extra2', 'Extra3', 'Extra4', 'Extra5', 'Extra6', 'Extra7'], errors='ignore')
 
     # Rename the raw column to 'Time' temporarily
     df = df.rename(columns={'Time_Raw': 'Time'})
 
     # 4. Safely Split Date and Time_Raw (Example: '9/1/2025 10:10:37 AM')
     
-    # Convert 'Time_Raw' to string, replacing NaN with an empty string ('')
     time_series = df['Time'].astype(str).replace('nan', '') 
     
-    # NEW FIX: Use regex splitting to handle potential multiple spaces between Time and AM/PM
     # Regex to capture Date, Time, and AM/PM parts: (\d+/\d+/\d+)\s+(\d{1,2}:\d{2}:\d{2})\s*(\w+)
     date_time_parts = time_series.str.extract(r'(\d+/\d+/\d+)\s+(\d{1,2}:\d{2}:\d{2})\s*(\w+)', expand=True)
 
-    # Assign captured results (Date_Part, Time_Only, AM_PM)
-    df['Date_Part'] = date_time_parts[0]
-    df['Time_With_AMPM'] = date_time_parts[1].astype(str) + ' ' + date_time_parts[2].astype(str)
+    # Combine captured results into the full time string
+    df['DateTime_Raw'] = date_time_parts[0].astype(str) + ' ' + date_time_parts[1].astype(str) + ' ' + date_time_parts[2].astype(str)
     
-    # Clean up 'Time_With_AMPM' result where it might be 'nan nan' if the original Time_Raw was empty
-    df.loc[df['Time_With_AMPM'].str.contains('nan'), 'Time_With_AMPM'] = ''
-
     # 5. Process Date and Time for final use
     
-    # Convert 'Date_Part' to proper datetime object
-    df['Date'] = pd.to_datetime(df['Date_Part'], format='%m/%d/%Y', errors='coerce')
-
-    # Combine Date and Time_With_AMPM strings into a single datetime column for sorting
-    # Use fillna('') to safely format strings without converting to 'NaT' string first
-    # This column MUST be preserved until Time is extracted.
+    # Final datetime conversion (Handle 'nan nan nan' if extraction failed)
     df['DateTime'] = pd.to_datetime(
-        df['Date_Part'].fillna('').astype(str) + ' ' + df['Time_With_AMPM'].fillna('').astype(str), 
+        df['DateTime_Raw'].replace('nan nan nan', ''), 
         format='%m/%d/%Y %I:%M:%S %p', 
         errors='coerce'
     )
     
-    # Extract ONLY the final time part to 'Time' column (Fixes KeyError on 'Time')
+    # Extract final Date and Time components
+    df['Date'] = df['DateTime'].dt.normalize() # Extract only the date part
     df['Time'] = df['DateTime'].dt.time
     
-    # Drop intermediate and original raw columns (KEEPING 'Time' and 'Date')
-    df = df.drop(columns=['Time_Raw', 'Date_Part', 'Time_With_AMPM'], errors='ignore') 
-    
-    # Drop the temporary 'DateTime' column AFTER extracting 'Time'
-    df = df.drop(columns=['DateTime'])
+    # Drop intermediate and original raw columns
+    df = df.drop(columns=['Time_Raw', 'DateTime_Raw', 'DateTime'], errors='ignore') 
     
     # --- FINAL CLEANUP BEFORE GROUPING ---
     # FIX: Remove rows where Time conversion failed (NaT) to prevent ValueError in apply/min/max functions.
-    df = df.dropna(subset=['Time']).copy() 
+    df = df.dropna(subset=['Time', 'Date']).copy() 
     
     # Sort data by Person ID, Date, and Time
     df = df.sort_values(by=['id', 'Date', 'Time'])
@@ -165,7 +151,6 @@ if uploaded_file is not None:
         if not times:
             return [None, None]
         
-        # We must rely on min/max functions to find the first/last time
         first_entry = min(times)
         last_entry = max(times)
         
@@ -196,7 +181,7 @@ if uploaded_file is not None:
     grouped['Check Out'] = grouped['Check Out'].astype(str).replace('None', 'no logout')
     
     # Show processed data
-    with st.container():
+    with st.container(border=True, ):
         st.subheader("Processed Data")
         st.write(grouped)
 
